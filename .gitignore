@@ -1,0 +1,8 @@
+__pycache__
+*runs
+*.txt
+main.py
+visual_clips.py
+spec.py
+gem.py
+hifi_gan.py
