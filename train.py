@@ -37,6 +37,7 @@ class Trainer:
         self.sw = SummaryWriter(self.conf.tensorboard_path)
 
         # Setup Models
+        self.embedding_layer = models.SampleRateEmbedding(self.conf.sr_embedding_dim, self.conf.supported_sampling_rates).to(self.device)
         self.generator = models.Generator(self.conf).to(self.device)
         self.mpd = models.MultiPeriodDiscriminator().to(self.device)
         self.msd = models.MultiScaleDiscriminator().to(self.device)
@@ -76,9 +77,17 @@ class Trainer:
         val_dataset = ds.AudioDataset(self.conf, val_files)
         visual_dataset = ds.AudioDataset(self.conf, audio_files_to_vis, adjust_to_seg_size=False)
         
-        self.train_loader = DataLoader(train_dataset, batch_size=self.conf.batch_size, shuffle=True, num_workers=4, pin_memory=True)
-        self.val_loader = DataLoader(val_dataset, batch_size=self.conf.batch_size, shuffle=False, num_workers=4, pin_memory=True)
-        self.visual_loader = DataLoader(visual_dataset, batch_size=self.conf.batch_size, shuffle=False, num_workers=4, pin_memory=True)
+        self.train_loader = DataLoader(train_dataset, batch_size=self.conf.batch_size, shuffle=True, collate_fn=ds.collate_fn, num_workers=4, pin_memory=True)
+        self.val_loader = DataLoader(val_dataset, batch_size=self.conf.batch_size, shuffle=False, collate_fn=ds.collate_fn, num_workers=4, pin_memory=True)
+        self.visual_loader = DataLoader(visual_dataset, batch_size=1, shuffle=False, collate_fn=ds.collate_fn, num_workers=4, pin_memory=True)
+
+    def _mel_spec_for_batch(self, audio_batch, sr_batch):
+        mel_list = []
+        for audio, sr in zip(audio_batch, sr_batch):
+            sr = sr.item()
+            mel_list.append(utils.mel_spectrogram(audio, self.conf, sr))
+        
+        return torch.stack(mel_list)
 
     def _log_training(self, step, start_time, loss_gen, loss_disc, loss_mel):
         self.sw.add_scalar("Loss/Train/Generator_total", loss_gen.item(), step)
@@ -100,14 +109,19 @@ class Trainer:
         total_gen_loss, total_disc_loss, total_mel_loss = 0, 0, 0
         
         with torch.no_grad():
-            for i, y in enumerate(self.val_loader):
+            for i, batch in enumerate(self.val_loader):
                 if i >= self.conf.num_batches_to_val:
                     break
 
-                y = y.to(self.device).unsqueeze(1)
-                mel = utils.mel_spectrogram(y.squeeze(1), self.conf)
+                if batch is None:
+                    continue
 
-                y_g_hat = self.generator(mel)
+                y, mel, sr = batch['audio'], batch['mel'], batch['sr']
+
+                y, mel, sr = y.to(self.device).unsqueeze(1), mel.to(self.device), sr.to(self.device)
+                condition = self.embedding_layer(sr)
+
+                y_g_hat = self.generator(mel, condition)
                 y_g_hat = y_g_hat[:, :, :self.conf.segment_size]
 
                 y_df_hat_r, y_df_hat_g, _, _ = self.mpd(y, y_g_hat)
@@ -118,7 +132,7 @@ class Trainer:
 
                 total_disc_loss += (loss_disc_s + loss_disc_f).item()
 
-                mel_g_hat = utils.mel_spectrogram(y_g_hat.squeeze(1), self.conf)
+                mel_g_hat = self._mel_spec_for_batch(y_g_hat.squeeze(1), sr)
                 loss_mel = F.l1_loss(mel, mel_g_hat)
 
                 _, _, fmap_f_r, fmap_f_g = self.mpd(y, y_g_hat)
@@ -159,30 +173,35 @@ class Trainer:
         self.generator.eval()
 
         with torch.no_grad():
-            for y in self.visual_loader:
-                sample_counter = 0
-                y = y.to(self.device).unsqueeze(1)
+            sample_counter = 0
+            for batch in self.visual_loader:
+                if batch is None:
+                    continue
 
-                mel = utils.mel_spectrogram(y.squeeze(1), self.conf)
-                y_g_hat = self.generator(mel)
+                y, mel, sr = batch['audio'], batch['mel'], batch['sr']
 
-                for real_audio, gen_audio in zip(y, y_g_hat):
+                y, mel, sr = y.to(self.device).unsqueeze(1), mel.to(self.device), sr.to(self.device)
+                condition = self.embedding_layer(sr)
+
+                y_g_hat = self.generator(mel, condition)
+
+                for real_audio, gen_audio, samp_rate in zip(y, y_g_hat, sr):
                     if step == 0:
-                        self.sw.add_audio(f'Audio/Real_{sample_counter+1}', snd_tensor=real_audio, sample_rate=self.conf.sampling_rate)
+                        self.sw.add_audio(f'Audio/Real_{sample_counter+1}', snd_tensor=real_audio, sample_rate=samp_rate.item())
 
-                        real_mel_spec = utils.mel_spectrogram(real_audio, self.conf)
-                        self.sw.add_image(f'Mel_Spectrogram/Real_{sample_counter+1}', img_tensor=utils.plot_mel_spectrogram_to_numpy(real_mel_spec.squeeze(0).cpu().detach().numpy(), self.conf), dataformats='HWC')
+                        real_mel_spec = utils.mel_spectrogram(real_audio, self.conf, samp_rate.item())
+                        self.sw.add_image(f'Mel_Spectrogram/Real_{sample_counter+1}', img_tensor=utils.plot_mel_spectrogram_to_numpy(real_mel_spec.squeeze(0).cpu().detach().numpy(), self.conf, samp_rate.item()), dataformats='HWC')
 
                         real_linear_spec = utils.linear_spectrogram(real_audio, self.conf)
-                        self.sw.add_image(f'Linear_Spectrogram/Real_{sample_counter+1}', img_tensor=utils.plot_linear_spectrogram_to_numpy(real_linear_spec.squeeze(0).cpu().detach().numpy(), self.conf), dataformats='HWC')
+                        self.sw.add_image(f'Linear_Spectrogram/Real_{sample_counter+1}', img_tensor=utils.plot_linear_spectrogram_to_numpy(real_linear_spec.squeeze(0).cpu().detach().numpy(), self.conf, samp_rate.item()), dataformats='HWC')
 
-                    self.sw.add_audio(f'Audio/Generated _{sample_counter+1}', snd_tensor=gen_audio, global_step=step, sample_rate=self.conf.sampling_rate)
+                    self.sw.add_audio(f'Audio/Generated _{sample_counter+1}', snd_tensor=gen_audio, global_step=step, sample_rate=samp_rate.item())
                             
-                    gen_mel_spec = utils.mel_spectrogram(gen_audio, self.conf)
-                    self.sw.add_image(f'Mel_Spectrogram/Generated_{sample_counter+1}', img_tensor=utils.plot_mel_spectrogram_to_numpy(gen_mel_spec.squeeze(0).cpu().detach().numpy(), self.conf), global_step=step, dataformats='HWC')
+                    gen_mel_spec = utils.mel_spectrogram(gen_audio, self.conf, samp_rate.item())
+                    self.sw.add_image(f'Mel_Spectrogram/Generated_{sample_counter+1}', img_tensor=utils.plot_mel_spectrogram_to_numpy(gen_mel_spec.squeeze(0).cpu().detach().numpy(), self.conf, samp_rate.item()), global_step=step, dataformats='HWC')
 
                     gen_linear_spec = utils.linear_spectrogram(gen_audio, self.conf)
-                    self.sw.add_image(f'Linear_Spectrogram/Generated_{sample_counter+1}', img_tensor=utils.plot_linear_spectrogram_to_numpy(gen_linear_spec.squeeze(0).cpu().detach().numpy(), self.conf), global_step=step, dataformats='HWC')
+                    self.sw.add_image(f'Linear_Spectrogram/Generated_{sample_counter+1}', img_tensor=utils.plot_linear_spectrogram_to_numpy(gen_linear_spec.squeeze(0).cpu().detach().numpy(), self.conf, samp_rate.item()), global_step=step, dataformats='HWC')
                     
                     sample_counter += 1
 
@@ -201,15 +220,20 @@ class Trainer:
 
         while step <= self.conf.steps:
             try:
-                y = next(data_iterator)
+                batch = next(data_iterator)
             except StopIteration:
                 data_iterator = iter(self.train_loader)
-                y = next(data_iterator)
+                batch = next(data_iterator)
 
-            y = y.to(self.device).unsqueeze(1)
-            mel = utils.mel_spectrogram(y.squeeze(1), self.conf)
+            if batch is None:
+                continue
 
-            y_g_hat = self.generator(mel)
+            y, mel, sr = batch['audio'], batch['mel'], batch['sr']
+
+            y, mel, sr = y.to(self.device).unsqueeze(1), mel.to(self.device), sr.to(self.device)
+            condition = self.embedding_layer(sr)
+
+            y_g_hat = self.generator(mel, condition)
             y_g_hat = y_g_hat[:, :, :self.conf.segment_size]
 
             # Discriminator Training
@@ -228,7 +252,7 @@ class Trainer:
             # Generator Training
             self.optim_g.zero_grad()
 
-            mel_g_hat = utils.mel_spectrogram(y_g_hat.squeeze(1), self.conf)
+            mel_g_hat = self._mel_spec_for_batch(y_g_hat.squeeze(1), sr)
             loss_mel = F.l1_loss(mel, mel_g_hat)
 
             y_df_hat_r, y_df_hat_g, fmap_f_r, fmap_f_g = self.mpd(y, y_g_hat)

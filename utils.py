@@ -28,18 +28,18 @@ def linear_spectrogram(y, config):
     return log_spec
 
 # Mel-Spectrogram Conversion
-def mel_spectrogram(y, config):
+def mel_spectrogram(y, config, sampling_rate):
     """
-    Converts a waveform tensor into a mel-spectrogram.
+    Converts a waveform tensor with a given sampling rate into a mel-spectrogram.
     """
     mel_transform = torchaudio.transforms.MelSpectrogram(
-        sample_rate=config.sampling_rate,
+        sample_rate=sampling_rate,
         n_fft=config.n_fft,
         n_mels=config.n_mels,
         hop_length=config.hop_size,
         win_length=config.win_size,
         f_min=config.fmin,
-        f_max=config.fmax,
+        f_max=sampling_rate // 2,
         power=1.0,
     ).to(y.device)
 
@@ -50,7 +50,7 @@ def mel_spectrogram(y, config):
     return log_mel_spec
 
 # Helper function for plotting linear spectrograms
-def plot_linear_spectrogram_to_numpy(spectrogram, config):
+def plot_linear_spectrogram_to_numpy(spectrogram, config, sampling_rate):
     """Converts a linear spectrogram tensor to a NumPy image array.
     The result contains Hz and time (sec) axes."""
     fig, ax = plt.subplots(figsize=(10, 4))
@@ -60,7 +60,7 @@ def plot_linear_spectrogram_to_numpy(spectrogram, config):
     num_freq_bins = spectrogram.shape[0]
     num_ticks_y = 8
     y_ticks = np.linspace(0, num_freq_bins - 1, num=num_ticks_y, dtype=np.intc)
-    y_tick_labels = [f"{i * (config.sampling_rate / 2) / num_freq_bins / 1000:.1f}k" for i in y_ticks]
+    y_tick_labels = [f"{i * (sampling_rate / 2) / num_freq_bins / 1000:.1f}k" for i in y_ticks]
     ax.set_yticks(y_ticks)
     ax.set_yticklabels(y_tick_labels)
 
@@ -68,7 +68,7 @@ def plot_linear_spectrogram_to_numpy(spectrogram, config):
     num_frames = spectrogram.shape[1]
     num_ticks_x = 5
     x_ticks = np.linspace(0, num_frames - 1, num=num_ticks_x, dtype=np.intc)
-    x_tick_labels = [f"{i * config.hop_size / config.sampling_rate:.2f}" for i in x_ticks]
+    x_tick_labels = [f"{i * config.hop_size / sampling_rate:.2f}" for i in x_ticks]
     ax.set_xticks(x_ticks)
     ax.set_xticklabels(x_tick_labels)
 
@@ -84,14 +84,14 @@ def plot_linear_spectrogram_to_numpy(spectrogram, config):
     return img_arr
 
 # Helper function for plotting mel-spectrograms
-def plot_mel_spectrogram_to_numpy(spectrogram, config):
+def plot_mel_spectrogram_to_numpy(spectrogram, config, sampling_rate):
     """Converts a mel-spectrogram tensor to a NumPy image array.
     The result contains Hz and time (sec) axes."""
     fig, ax = plt.subplots(figsize=(10, 4))
     im = ax.imshow(spectrogram, aspect="auto", origin="lower", interpolation='none')
     
     # Convert Y-axis from Mel bins to Hz
-    mel_freqs = librosa.mel_frequencies(n_mels=config.n_mels, fmin=config.fmin, fmax=config.fmax)
+    mel_freqs = librosa.mel_frequencies(n_mels=config.n_mels, fmin=config.fmin, fmax=sampling_rate // 2)
     num_ticks_y = 8
     y_ticks = np.linspace(0, config.n_mels - 1, num=num_ticks_y, dtype=np.intc)
     y_tick_labels = [f"{mel_freqs[i]/1000:.1f}k" for i in y_ticks]
@@ -102,7 +102,7 @@ def plot_mel_spectrogram_to_numpy(spectrogram, config):
     num_frames = spectrogram.shape[1]
     num_ticks_x = 5
     x_ticks = np.linspace(0, num_frames - 1, num=num_ticks_x, dtype=np.intc)
-    x_tick_labels = [f"{i * config.hop_size / config.sampling_rate:.2f}" for i in x_ticks]
+    x_tick_labels = [f"{i * config.hop_size / sampling_rate:.2f}" for i in x_ticks]
     ax.set_xticks(x_ticks)
     ax.set_xticklabels(x_tick_labels)
 

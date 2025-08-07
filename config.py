@@ -24,8 +24,13 @@ class HifiGanConfig:
     # Path of selected audio clips that will be used to print spectrograms and generated clips in TensorBoard every `visualization_interval` steps
     audio_to_visualize_path = "/scratch/vb00479/audioset_balanced_22k/visuals"
     
-    # Target sampling rate. Each clip will be resampled at this sampling rate
-    sampling_rate = 16000
+    # Sampling rate of clips in the original dataset
+    native_sampling_rate = 48000
+    # List of target sampling rates to select from. Each clip will be resampled at one of these sampling rates
+    supported_sampling_rates = [11025, 16000, 22050, 44100, 48000]
+
+    # Dimension of sampling rate encoding (embedding)
+    sr_embedding_dim = 128
     
     # The length of audio segments to use for training and validation (in samples)
     segment_size = 8192
@@ -36,7 +41,7 @@ class HifiGanConfig:
     hop_size = 256        # Hop size between frames
     win_size = 1024       # Window size
     fmin = 0              # Minimum frequency
-    fmax = 8000           # Maximum frequency
+    fmax = None           # Maximum frequency
 
     # Training parameters
     steps = 100000
@@ -66,4 +71,12 @@ class HifiGanConfig:
 
 
 # Save hyperparameter values for TensorBoard logging
-hparam_dict = {k: v for k, v in vars(HifiGanConfig).items() if not k.startswith('__')}
+hparam_dict = {}
+for k, v in vars(HifiGanConfig).items():
+    if k.startswith('__') or v is None:
+        continue
+
+    if isinstance(v, list):
+        hparam_dict[k] = str(v)
+    else:
+        hparam_dict[k] = v

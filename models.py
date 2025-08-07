@@ -4,6 +4,7 @@ HiFi-GAN Model Implementation.
 This module contains the core architecture for the Generator and Discriminators ruquired for HiFi-GAN training.
 """
 
+import math
 import torch
 import torch.nn as nn
 from torch.nn import functional as F
@@ -12,9 +13,47 @@ from torch.nn.utils import weight_norm, remove_weight_norm, spectral_norm
 import utils
 
 
-class _ResBlock(nn.Module):
-    def __init__(self, channels, kernel_size=3, dilation=(1, 3, 5)):
-        super(_ResBlock, self).__init__()
+class SampleRateEmbedding(nn.Module):
+    def __init__(self, embedding_dim, sample_rates):
+        super().__init__()
+        if embedding_dim % 2 != 0: raise ValueError("Embedding dim must be even.")
+        self.embedding_dim = embedding_dim
+        self.sr_to_idx = {sr: i for i, sr in enumerate(sample_rates)}
+
+        num_embeddings = len(sample_rates)
+        position = torch.arange(num_embeddings, dtype=torch.float).unsqueeze(1)
+        div_term = torch.exp(torch.arange(0, embedding_dim, 2).float() * (-math.log(10000.0) / embedding_dim))
+        
+        embedding_table = torch.zeros(num_embeddings, embedding_dim)
+        embedding_table[:, 0::2] = torch.sin(position * div_term)
+        embedding_table[:, 1::2] = torch.cos(position * div_term)
+        self.register_buffer('embedding_table', embedding_table)
+
+    def forward(self, sr_values):
+        indices = torch.tensor([self.sr_to_idx[sr.item()] for sr in sr_values], device=sr_values.device)
+
+        return self.embedding_table[indices]
+
+
+class _FilmLayer(nn.Module):
+    def __init__(self, condition_dim, feature_dim):
+        super().__init__()
+        self.film_generator = nn.Linear(condition_dim, feature_dim * 2)
+
+    def forward(self, features, condition):
+        gamma_beta = self.film_generator(condition)
+        gamma, beta = torch.chunk(gamma_beta, chunks=2, dim=1)
+
+        while len(gamma.shape) < len(features.shape):
+            gamma = gamma.unsqueeze(-1)
+            beta = beta.unsqueeze(-1)
+
+        return gamma * features + beta
+
+
+class _FilmResBlock(nn.Module):
+    def __init__(self, channels, sr_emb_dim, kernel_size=3, dilation=(1, 3, 5)):
+        super(_FilmResBlock, self).__init__()
         self.convs1 = nn.ModuleList([
             weight_norm(nn.Conv1d(channels, channels, kernel_size, 1, dilation=d, padding=((kernel_size - 1) * d) // 2))
             for d in dilation
@@ -27,9 +66,12 @@ class _ResBlock(nn.Module):
         ])
         self.convs2.apply(utils.init_weights)
 
-    def forward(self, x):
-        for c1, c2 in zip(self.convs1, self.convs2):
+        self.film_layers = nn.ModuleList([_FilmLayer(sr_emb_dim, channels) for _ in dilation])
+
+    def forward(self, x, sr_embedding):
+        for c1, c2, film in zip(self.convs1, self.convs2, self.film_layers):
             xt = F.leaky_relu(x, 0.1)
+            xt = film(xt, sr_embedding)
             xt = c1(xt)
             xt = F.leaky_relu(xt, 0.1)
             xt = c2(xt)
@@ -61,14 +103,14 @@ class Generator(nn.Module):
         for i in range(len(self.ups)):
             ch = 512 // (2**(i+1))
             for j, (k, d) in enumerate(zip([3, 7, 11], [(1, 3, 5), (1, 3, 5), (1, 3, 5)])):
-                self.resblocks.append(_ResBlock(ch, k, d))
+                self.resblocks.append(_FilmResBlock(ch, config.sr_embedding_dim, k, d))
 
         self.conv_post = weight_norm(nn.Conv1d(512 // (2**len(self.ups)), 1, 7, 1, padding=3))
 
         self.ups.apply(utils.init_weights)
         self.conv_post.apply(utils.init_weights)
 
-    def forward(self, x):
+    def forward(self, x, sr_embedding):
         x = self.conv_pre(x)
         for i, up in enumerate(self.ups):
             x = F.leaky_relu(x, 0.1)
@@ -76,9 +118,9 @@ class Generator(nn.Module):
             xs = None
             for j in range(self.num_kernels):
                 if xs is None:
-                    xs = self.resblocks[i*self.num_kernels+j](x)
+                    xs = self.resblocks[i*self.num_kernels+j](x, sr_embedding)
                 else:
-                    xs += self.resblocks[i*self.num_kernels+j](x)
+                    xs += self.resblocks[i*self.num_kernels+j](x, sr_embedding)
             x = xs / self.num_kernels
         x = F.leaky_relu(x)
         x = self.conv_post(x)
