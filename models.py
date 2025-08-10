@@ -19,7 +19,7 @@ class SampleRateEmbedding(nn.Module):
         if embedding_dim % 2 != 0: raise ValueError("Embedding dim must be even.")
         self.embedding_dim = embedding_dim
         self.sr_to_idx = {sr: i for i, sr in enumerate(sample_rates)}
-
+        
         num_embeddings = len(sample_rates)
         position = torch.arange(num_embeddings, dtype=torch.float).unsqueeze(1)
         div_term = torch.exp(torch.arange(0, embedding_dim, 2).float() * (-math.log(10000.0) / embedding_dim))
