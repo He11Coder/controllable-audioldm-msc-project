@@ -265,3 +265,23 @@ def generator_loss(disc_outputs):
         l = torch.mean((1-dg)**2)
         loss += l
     return loss
+
+def spectral_cutoff_loss(y_g_hat, target_sr_batch, config):
+    stft = torch.stft(y_g_hat.squeeze(1), n_fft=config.n_fft, hop_length=config.hop_size, 
+                      win_length=config.win_size, return_complex=True)
+    magnitudes = torch.abs(stft)
+
+    loss = 0.0
+    for i in range(magnitudes.size(0)):
+        target_sr = target_sr_batch[i].item()
+        if target_sr >= config.native_sampling_rate:
+            continue
+
+        nyquist_freq = target_sr / 2
+        freq_bin_width = config.native_sampling_rate / config.n_fft
+        cutoff_bin = int(nyquist_freq / freq_bin_width)
+
+        undesired_energy = magnitudes[i, cutoff_bin:, :]
+        loss += torch.mean(undesired_energy)
+    
+    return loss / magnitudes.size(0)
