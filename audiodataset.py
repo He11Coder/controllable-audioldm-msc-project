@@ -26,13 +26,11 @@ class AudioDataset(Dataset):
         self.config = config
         self.audio_files = audio_files_list
         self.adjust_to_seg_size = adjust_to_seg_size
-        self.mel_transforms = {
-            sr: torchaudio.transforms.MelSpectrogram(
-                sample_rate=sr, n_fft=config.n_fft, n_mels=config.n_mels,
-                hop_length=config.hop_size, win_length=config.win_size,
-                f_min=config.fmin, f_max=sr // 2, power=1.0
-            ) for sr in config.supported_sampling_rates
-        }
+        self.mel_transform = torchaudio.transforms.MelSpectrogram(
+            sample_rate=self.config.native_sampling_rate, n_fft=config.n_fft, n_mels=config.n_mels,
+            hop_length=config.hop_size, win_length=config.win_size,
+            f_min=config.fmin, f_max=config.native_sampling_rate // 2, power=1.0
+        )
 
     def __len__(self):
         return len(self.audio_files)
@@ -41,41 +39,55 @@ class AudioDataset(Dataset):
         filepath = self.audio_files[index]
         try:
             # Load audio file
-            audio, sr = torchaudio.load(filepath)
+            audio_native, sr = torchaudio.load(filepath)
         except Exception as e:
             print(f"Error loading file {filepath}: {e}")
             # Return zero tensor on error
             return None #torch.zeros(self.config.segment_size)
 
-        # Resample if necessary
-        target_sr = random.choice(self.config.supported_sampling_rates)
-        if target_sr != sr:
-            resampler = torchaudio.transforms.Resample(sr, target_sr)
-            audio = resampler(audio)
-
         # Ensure mono channel
-        if audio.shape[0] > 1:
-            audio = torch.mean(audio, dim=0, keepdim=True)
+        if audio_native.shape[0] > 1:
+            audio_native = torch.mean(audio_native, dim=0, keepdim=True)
 
         # Normalize audio
-        audio = audio / (torch.max(torch.abs(audio)) + 1e-8)
+        audio_native = audio_native / (torch.max(torch.abs(audio_native)) + 1e-8)
+
+        # Resample if necessary
+        if sr != self.config.native_sampling_rate:
+            resampler = torchaudio.transforms.Resample(sr, self.config.native_sampling_rate)
+            audio_native = resampler(audio_native)
+
+        target_sr = random.choice(self.config.supported_sampling_rates)
+        if target_sr != self.config.native_sampling_rate:
+            resampler = torchaudio.transforms.Resample(self.config.native_sampling_rate, target_sr)
+            audio_target = resampler(audio_native)
+        else:
+            audio_target = audio_native
+
         
         # Pad or slice to segment_size if adjust_to_seg_size=True
         if self.adjust_to_seg_size == True:
-            if audio.size(1) >= self.config.segment_size:
-                max_start = audio.size(1) - self.config.segment_size
-                start_idx = random.randint(0, max_start)
-                audio = audio[:, start_idx : start_idx + self.config.segment_size]
+            if audio_target.size(1) >= self.config.segment_size:
+                max_start_target = audio_target.size(1) - self.config.segment_size
+                start_idx_target = random.randint(0, max_start_target)
+                audio_segment_target = audio_target[:, start_idx_target : start_idx_target + self.config.segment_size]
             else:
-                audio = F.pad(audio, (0, self.config.segment_size - audio.size(1)), 'constant')
+                audio_segment_target = F.pad(audio_target, (0, self.config.segment_size - audio_target.size(1)), 'constant')
+
+            start_idx_native = int(start_idx_target * (self.config.native_sampling_rate / target_sr))
+            segment_size_native = int(self.config.segment_size * (self.config.native_sampling_rate / target_sr))
+
+            if audio_native.size(1) < start_idx_native + segment_size_native:
+                audio_native = F.pad(audio_native, (0, start_idx_native + segment_size_native - audio_native.size(1)))
+
+            audio_segment_native = audio_native[:, start_idx_native : start_idx_native + segment_size_native]
 
         # Apply necessary MelSpectrogram transform
-        mel_transform = self.mel_transforms[target_sr]
-        mel_spec = mel_transform(audio)
+        mel_spec = self.mel_transform(audio_segment_native)
         log_mel_spec = torch.log(torch.clamp(mel_spec, min=1e-5))
 
         return {
-            'audio': audio.squeeze(0),
+            'audio': audio_segment_target.squeeze(0),
             'mel': log_mel_spec.squeeze(0),
             'sr': target_sr,
         }
