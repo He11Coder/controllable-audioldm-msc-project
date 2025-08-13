@@ -21,11 +21,12 @@ class AudioDataset(Dataset):
 
     See `HifiGanConfig` in `config.py` for more controllability.
     """
-    def __init__(self, config, audio_files_list, adjust_to_seg_size=True):
+    def __init__(self, config, audio_files_list, adjust_to_seg_size=True, random_sampling_rate=True):
         super().__init__()
         self.config = config
         self.audio_files = audio_files_list
         self.adjust_to_seg_size = adjust_to_seg_size
+        self.random_sr = random_sampling_rate
         self.mel_transform = torchaudio.transforms.MelSpectrogram(
             sample_rate=self.config.native_sampling_rate, n_fft=config.n_fft, n_mels=config.n_mels,
             hop_length=config.hop_size, win_length=config.win_size,
@@ -57,16 +58,22 @@ class AudioDataset(Dataset):
             resampler = torchaudio.transforms.Resample(sr, self.config.native_sampling_rate)
             audio_native = resampler(audio_native)
 
-        target_sr = random.choice(self.config.supported_sampling_rates)
+        if self.random_sr == True:
+            target_sr = random.choice(self.config.supported_sampling_rates)
+        else:
+            target_sr = self.config.supported_sampling_rates[index % len(self.config.supported_sampling_rates)]
+
         if target_sr != self.config.native_sampling_rate:
             resampler = torchaudio.transforms.Resample(self.config.native_sampling_rate, target_sr)
             audio_target = resampler(audio_native)
         else:
             audio_target = audio_native
 
-        
         # Pad or slice to segment_size if adjust_to_seg_size=True
+        audio_segment_native = audio_native
+        audio_segment_target = audio_target
         if self.adjust_to_seg_size == True:
+            start_idx_target = 0
             if audio_target.size(1) >= self.config.segment_size:
                 max_start_target = audio_target.size(1) - self.config.segment_size
                 start_idx_target = random.randint(0, max_start_target)
@@ -85,6 +92,14 @@ class AudioDataset(Dataset):
         # Apply necessary MelSpectrogram transform
         mel_spec = self.mel_transform(audio_segment_native)
         log_mel_spec = torch.log(torch.clamp(mel_spec, min=1e-5))
+
+        if self.adjust_to_seg_size == True:
+            if log_mel_spec.size(2) >= self.config.mel_segment_length:
+                max_mel_start = log_mel_spec.size(2) - self.config.mel_segment_length
+                mel_start = random.randint(0, max_mel_start)
+                log_mel_spec = log_mel_spec[:, :, mel_start:mel_start + self.config.mel_segment_length]
+            else:
+                log_mel_spec = F.pad(log_mel_spec, (0, self.config.mel_segment_length - log_mel_spec.size(2)), 'constant')
 
         return {
             'audio': audio_segment_target.squeeze(0),

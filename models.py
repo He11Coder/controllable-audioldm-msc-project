@@ -267,8 +267,10 @@ def generator_loss(disc_outputs):
     return loss
 
 def spectral_cutoff_loss(y_g_hat, target_sr_batch, config):
+    window = torch.hann_window(config.win_size).to(y_g_hat.device)
+
     stft = torch.stft(y_g_hat.squeeze(1), n_fft=config.n_fft, hop_length=config.hop_size, 
-                      win_length=config.win_size, return_complex=True)
+                      win_length=config.win_size, window=window, return_complex=True)
     magnitudes = torch.abs(stft)
 
     loss = 0.0
