@@ -129,10 +129,22 @@ class Trainer:
                 segment_size_native = int(self.conf.segment_size * (self.conf.native_sampling_rate / sr[0].item()))
                 y_g_hat = y_g_hat[:, :, :segment_size_native]
 
-                y_df_hat_r, y_df_hat_g, _, _ = self.mpd(y, y_g_hat)
+                y_upsampled = []
+                for i in range(y.size(0)):
+                    resampler_native = torchaudio.transforms.Resample(sr[i].item(), self.conf.native_sampling_rate).to(self.device)
+                    y_native = resampler_native(y[i])
+
+                    min_len = min(y_native.size(1), y_g_hat[i].size(1))
+                    y_native = y_native[:, :min_len]
+
+                    y_upsampled.append(y_native)
+
+                y_upsampled = torch.stack(y_upsampled)
+
+                y_df_hat_r, y_df_hat_g, _, _ = self.mpd(y_upsampled, y_g_hat)
                 loss_disc_f = models.discriminator_loss(y_df_hat_r, y_df_hat_g)
 
-                y_ds_hat_r, y_ds_hat_g, _, _ = self.msd(y, y_g_hat)
+                y_ds_hat_r, y_ds_hat_g, _, _ = self.msd(y_upsampled, y_g_hat)
                 loss_disc_s = models.discriminator_loss(y_ds_hat_r, y_ds_hat_g)
 
                 total_disc_loss += (loss_disc_s + loss_disc_f).item()
@@ -161,8 +173,8 @@ class Trainer:
                 #mel_g_hat = self._mel_spec_for_batch(y_g_hat.squeeze(1), sr)
                 #loss_mel = F.l1_loss(mel, mel_g_hat)
 
-                _, _, fmap_f_r, fmap_f_g = self.mpd(y, y_g_hat)
-                _, _, fmap_s_r, fmap_s_g = self.msd(y, y_g_hat)
+                _, _, fmap_f_r, fmap_f_g = self.mpd(y_upsampled, y_g_hat)
+                _, _, fmap_s_r, fmap_s_g = self.msd(y_upsampled, y_g_hat)
 
                 loss_fm_f = models.feature_loss(fmap_f_r, fmap_f_g)
                 loss_fm_s = models.feature_loss(fmap_s_r, fmap_s_g)
@@ -270,13 +282,25 @@ class Trainer:
             segment_size_native = int(self.conf.segment_size * (self.conf.native_sampling_rate / sr[0].item()))
             y_g_hat = y_g_hat[:, :, :segment_size_native]
 
+            y_upsampled = []
+            for i in range(y.size(0)):
+                resampler_native = torchaudio.transforms.Resample(sr[i].item(), self.conf.native_sampling_rate).to(self.device)
+                y_native = resampler_native(y[i])
+
+                min_len = min(y_native.size(1), y_g_hat[i].size(1))
+                y_native = y_native[:, :min_len]
+
+                y_upsampled.append(y_native)
+
+            y_upsampled = torch.stack(y_upsampled)
+
             # Discriminator Training
             self.optim_d.zero_grad()
 
-            y_df_hat_r, y_df_hat_g, _, _ = self.mpd(y, y_g_hat.detach())
+            y_df_hat_r, y_df_hat_g, _, _ = self.mpd(y_upsampled, y_g_hat.detach())
             loss_disc_f = models.discriminator_loss(y_df_hat_r, y_df_hat_g)
 
-            y_ds_hat_r, y_ds_hat_g, _, _ = self.msd(y, y_g_hat.detach())
+            y_ds_hat_r, y_ds_hat_g, _, _ = self.msd(y_upsampled, y_g_hat.detach())
             loss_disc_s = models.discriminator_loss(y_ds_hat_r, y_ds_hat_g)
 
             loss_disc_all = loss_disc_s + loss_disc_f
@@ -310,8 +334,8 @@ class Trainer:
             #mel_g_hat = self._mel_spec_for_batch(y_g_hat.squeeze(1), sr)
             #loss_mel = F.l1_loss(mel, mel_g_hat)
 
-            y_df_hat_r, y_df_hat_g, fmap_f_r, fmap_f_g = self.mpd(y, y_g_hat)
-            y_ds_hat_r, y_ds_hat_g, fmap_s_r, fmap_s_g = self.msd(y, y_g_hat)
+            y_df_hat_r, y_df_hat_g, fmap_f_r, fmap_f_g = self.mpd(y_upsampled, y_g_hat)
+            y_ds_hat_r, y_ds_hat_g, fmap_s_r, fmap_s_g = self.msd(y_upsampled, y_g_hat)
 
             loss_fm_f = models.feature_loss(fmap_f_r, fmap_f_g)
             loss_fm_s = models.feature_loss(fmap_s_r, fmap_s_g)

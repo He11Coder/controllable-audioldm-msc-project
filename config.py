@@ -46,7 +46,7 @@ class HifiGanConfig:
     mel_segment_length = segment_size // hop_size
 
     # Training parameters
-    steps = 1000
+    steps = 50000
     batch_size = 16
     learning_rate_g = 0.0002
     learning_rate_d = 0.0002
@@ -57,7 +57,7 @@ class HifiGanConfig:
 
     # Validation parameters
     validation_split_ratio = 0.05 # Adjusts train/val split
-    validation_interval = 100 # Validate model every specified number of steps (i.e. interval)
+    validation_interval = 1000 # Validate model every specified number of steps (i.e. interval)
     num_batches_to_val = 30 # How many batches of `batch_size` to use for validation
 
     # Checkpoint and Logging
@@ -65,9 +65,9 @@ class HifiGanConfig:
 
     checkpoint_dir = "/scratch/vb00479/audioset_balanced_22k/checkpoints" # Parent directory for checkpoints
     checkpoint_path = os.path.join(checkpoint_dir, run_name) # Subdirectory to save model checkpoints for a specific run
-    checkpoint_interval = 20000 # How often to save checkpoints
+    checkpoint_interval = 25000 # How often to save checkpoints
     log_interval = 100 # Console logging interval
-    visualization_interval = 200 # How often to save generated audio clips and their spectrograms from `audio_to_visualize_path` directory
+    visualization_interval = 5000 # How often to save generated audio clips and their spectrograms from `audio_to_visualize_path` directory
     log_dir = "./hifi-gan_runs" # Parent directory for TensorBoard logs
     tensorboard_path = os.path.join(log_dir, run_name) # Subdirectory to save TensorBoard logs for a specific run
 
