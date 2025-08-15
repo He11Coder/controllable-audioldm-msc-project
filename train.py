@@ -78,8 +78,11 @@ class Trainer:
         val_dataset = ds.AudioDataset(self.conf, val_files)
         visual_dataset = ds.AudioDataset(self.conf, audio_files_to_vis, adjust_to_seg_size=False, random_sampling_rate=False)
         
-        self.train_loader = DataLoader(train_dataset, batch_size=self.conf.batch_size, shuffle=True, collate_fn=ds.collate_fn, num_workers=4, pin_memory=True)
-        self.val_loader = DataLoader(val_dataset, batch_size=self.conf.batch_size, shuffle=False, collate_fn=ds.collate_fn, num_workers=4, pin_memory=True)
+        train_sampler = ds.RateBucketingSampler(train_dataset, self.conf.batch_size, shuffle=True)
+        val_sampler = ds.RateBucketingSampler(val_dataset, self.conf.batch_size, shuffle=False)
+
+        self.train_loader = DataLoader(train_dataset, batch_sampler=train_sampler, collate_fn=ds.collate_fn, num_workers=4, pin_memory=True)
+        self.val_loader = DataLoader(val_dataset, batch_sampler=val_sampler, collate_fn=ds.collate_fn, num_workers=4, pin_memory=True)
         self.visual_loader = DataLoader(visual_dataset, batch_size=1, shuffle=False, collate_fn=ds.collate_fn, num_workers=4, pin_memory=True)
 
     def _mel_spec_for_batch(self, audio_batch, sr_batch):
