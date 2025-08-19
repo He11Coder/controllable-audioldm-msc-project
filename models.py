@@ -273,7 +273,7 @@ def spectral_cutoff_loss(y_g_hat, target_sr_batch, config):
                       win_length=config.win_size, window=window, return_complex=True)
     magnitudes = torch.abs(stft)
 
-    loss = 0.0
+    loss = torch.tensor(0.0, device=y_g_hat.device, requires_grad=True)
     for i in range(magnitudes.size(0)):
         target_sr = target_sr_batch[i].item()
         if target_sr >= config.native_sampling_rate:
@@ -284,6 +284,6 @@ def spectral_cutoff_loss(y_g_hat, target_sr_batch, config):
         cutoff_bin = int(nyquist_freq / freq_bin_width)
 
         undesired_energy = magnitudes[i, cutoff_bin:, :]
-        loss += torch.mean(undesired_energy)
+        loss = loss + torch.mean(undesired_energy)
     
     return loss / magnitudes.size(0)

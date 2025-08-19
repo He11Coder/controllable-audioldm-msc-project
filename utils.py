@@ -49,6 +49,22 @@ def mel_spectrogram(y, config, sampling_rate):
     log_mel_spec = torch.log(torch.clamp(mel_spec, min=1e-5))
     return log_mel_spec
 
+# Helper function that applies MelTransform to the whole batch of audio clips
+def mel_spec_for_batch(audio_batch, config, sr_batch):
+    """Applies MelSpectrogram transform to each audio clip in `audio_batch` using corresponding sampling rates from `sr_batch`.
+    If `sr_batch` is a single integer, in will be used as a sampling rate for each clip in `audio_batch`.
+
+    Returns a batch (`torch.Tensor`) of the resulting spectrograms"""
+    if isinstance(sr_batch, torch.Tensor):
+        mel_list = []
+        for audio, sr in zip(audio_batch, sr_batch):
+            sr = sr.item()
+            mel_list.append(mel_spectrogram(audio, config, sr))
+
+        return torch.stack(mel_list)
+    elif isinstance(sr_batch, int):
+        return mel_spectrogram(audio_batch, config, sr_batch)
+
 # Helper function for plotting linear spectrograms
 def plot_linear_spectrogram_to_numpy(spectrogram, config, sampling_rate):
     """Converts a linear spectrogram tensor to a NumPy image array.
