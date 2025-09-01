@@ -66,14 +66,20 @@ class _FilmResBlock(nn.Module):
         ])
         self.convs2.apply(utils.init_weights)
 
-        self.film_layers = nn.ModuleList([_FilmLayer(sr_emb_dim, channels) for _ in dilation])
+        self.film_layers1 = nn.ModuleList([_FilmLayer(sr_emb_dim, channels) for _ in dilation])
+        self.film_layers2 = nn.ModuleList([_FilmLayer(sr_emb_dim, channels) for _ in dilation])
 
     def forward(self, x, sr_embedding):
-        for c1, c2, film in zip(self.convs1, self.convs2, self.film_layers):
+        for c1, c2, film1, film2 in zip(self.convs1, self.convs2, self.film_layers1, self.film_layers2):
             xt = F.leaky_relu(x, 0.1)
-            xt = film(xt, sr_embedding)
+            
+            xt = film1(xt, sr_embedding)
+
             xt = c1(xt)
             xt = F.leaky_relu(xt, 0.1)
+
+            xt = film2(xt, sr_embedding)
+
             xt = c2(xt)
             x = xt + x
         return x

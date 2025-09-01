@@ -46,8 +46,8 @@ class HifiGanConfig:
     mel_segment_length = segment_size // hop_size
 
     # Training parameters
-    steps = 50000
-    batch_size = 8
+    steps = 100000
+    batch_size = 4
     learning_rate_g = 0.0002
     learning_rate_d = 0.0002
     adam_b1 = 0.8
