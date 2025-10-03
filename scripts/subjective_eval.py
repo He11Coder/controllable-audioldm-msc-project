@@ -9,7 +9,7 @@ from torch.utils.data import IterableDataset, DataLoader
 from torch.utils.tensorboard import SummaryWriter
 
 import config
-from utils import mel_spectrogram, linear_spectrogram
+from utils.init_weights import mel_spectrogram, linear_spectrogram
 from models import SampleRateEmbedding, Generator
 
 
@@ -19,10 +19,6 @@ class EvalDataset(IterableDataset):
         self.conf = config
         self.audio_files = audio_files_list
         self.sampling_rates = sampling_rates_to_eval
-
-        '''if len(self.audio_files) < len(self.sampling_rates):
-            num_to_add = len(self.sampling_rates) - len(self.audio_files)
-            self.audio_files = self.audio_files + random.choices(self.audio_files, k=num_to_add)'''
     
     def __iter__(self):
         #random.shuffle(self.audio_files)
@@ -47,28 +43,6 @@ class EvalDataset(IterableDataset):
                     'mel': mel,
                     'sr': target_sr,
                 }
-
-                
-
-        '''for file, target_sr in zip(self.audio_files, self.sampling_rates):
-            audio, sr = torchaudio.load(file)
-            if sr != target_sr:
-                resampler = torchaudio.transforms.Resample(sr, target_sr)
-                audio1 = resampler(audio)
-            
-            if audio.shape[0] > 1:
-                audio = torch.mean(audio, dim=0, keepdim=True)
-                audio1 = torch.mean(audio1, dim=0, keepdim=True)
-
-            audio = audio / (torch.max(torch.abs(audio)) + 1e-8)
-            audio1 = audio1 / (torch.max(torch.abs(audio1)) + 1e-8)
-            mel_at_native_sr = mel_spectrogram(audio1, self.conf, target_sr)
-
-            yield {
-                'audio': audio,
-                'mel': mel_at_native_sr,
-                'sr': target_sr,
-            }'''
 
 
 class Evaluator:
@@ -135,8 +109,6 @@ class Evaluator:
             target_sr = data['sr']
 
             condition_embedding = self._get_interpolated_embedding(target_sr).to(self.device)
-
-            #condition_embedding = self.embedding_layer(torch.tensor([target_sr])).to(self.device)
 
             with torch.no_grad():
                 gen_audio = self.generator(mel, condition_embedding)

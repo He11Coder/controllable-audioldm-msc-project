@@ -15,7 +15,7 @@ TRAIN_FOLDER = DATASET_FOLDER.joinpath("train")
 TRAIN_FOLDER.mkdir(parents=True, exist_ok=True)
 
 # Select dataset type by changing `download_type`. See the docs for more info on the parameters
-d = Downloader(root_path=TRAIN_FOLDER, n_jobs=CPU_COUNT*8, download_type='balanced_train', copy_and_replicate=False)
+d = Downloader(root_path=TRAIN_FOLDER, n_jobs=CPU_COUNT*8, download_type='unbalanced_train', copy_and_replicate=False)
 
 print("Download started")
 # This will download a balanced version of AudioSet (~22k data points/~30GB of disk space)

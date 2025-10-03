@@ -4,15 +4,6 @@ import librosa
 import torch
 import torchaudio
 
-# Random (Gaussian) weights initialization
-def init_weights(m, mean=0.0, std=0.01):
-    """
-    Initialize model with Gaussian weights.
-    """
-    classname = m.__class__.__name__
-    if classname.find("Conv") != -1:
-        m.weight.data.normal_(mean, std)
-
 # Linear Spectrogram Conversion
 def linear_spectrogram(y, config):
     """

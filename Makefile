@@ -13,7 +13,7 @@ run-tboard:
 .PHONY: run-train
 
 run-train:
-	python3 train.py --exp_name='$(EXP)'
+	python3 main.py --exp_name='$(EXP)'
 
 
 # Delete checkpoints of experiment
@@ -21,3 +21,10 @@ run-train:
 
 delete-pt:
 	rm -r /scratch/vb00479/audioset_balanced_22k/checkpoints/$(EXP)
+
+
+# Download AudioSet by running scripts/download_dataset.py script
+.PHONY: get-dataset
+
+get-dataset:
+	python3 scripts/download_dataset.py

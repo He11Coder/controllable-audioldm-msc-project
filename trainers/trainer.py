@@ -18,7 +18,8 @@ from torch.utils.data import DataLoader
 from torch.nn import functional as F
 
 import models
-import audiodataset as ds
+import losses
+import datasets as ds
 import utils
 import config
 
@@ -140,10 +141,10 @@ class Trainer:
                 y_g_hat = y_g_hat[:, :, :min_len]
 
                 y_df_hat_r, y_df_hat_g, _, _ = self.mpd(y_upsampled, y_g_hat)
-                loss_disc_f = models.discriminator_loss(y_df_hat_r, y_df_hat_g)
+                loss_disc_f = losses.discriminator_loss(y_df_hat_r, y_df_hat_g)
 
                 y_ds_hat_r, y_ds_hat_g, _, _ = self.msd(y_upsampled, y_g_hat)
-                loss_disc_s = models.discriminator_loss(y_ds_hat_r, y_ds_hat_g)
+                loss_disc_s = losses.discriminator_loss(y_ds_hat_r, y_ds_hat_g)
 
                 total_disc_loss += (loss_disc_s + loss_disc_f).item()
 
@@ -155,13 +156,13 @@ class Trainer:
                 _, _, fmap_f_r, fmap_f_g = self.mpd(y_upsampled, y_g_hat)
                 _, _, fmap_s_r, fmap_s_g = self.msd(y_upsampled, y_g_hat)
 
-                loss_fm_f = models.feature_loss(fmap_f_r, fmap_f_g)
-                loss_fm_s = models.feature_loss(fmap_s_r, fmap_s_g)
+                loss_fm_f = losses.feature_loss(fmap_f_r, fmap_f_g)
+                loss_fm_s = losses.feature_loss(fmap_s_r, fmap_s_g)
 
-                loss_gen_f = models.generator_loss(y_df_hat_g)
-                loss_gen_s = models.generator_loss(y_ds_hat_g)
+                loss_gen_f = losses.generator_loss(y_df_hat_g)
+                loss_gen_s = losses.generator_loss(y_ds_hat_g)
 
-                high_freq_loss = models.spectral_cutoff_loss(y_g_hat, sr, self.conf)
+                high_freq_loss = losses.spectral_cutoff_loss(y_g_hat, sr, self.conf)
 
                 total_gen_loss += (loss_gen_s + loss_gen_f + loss_fm_s + loss_fm_f + 45*loss_mel + 10*high_freq_loss).item()
                 total_mel_loss += loss_mel.item()
@@ -272,10 +273,10 @@ class Trainer:
             y_g_hat = y_g_hat[:, :, :min_len]
 
             y_df_hat_r, y_df_hat_g, _, _ = self.mpd(y_upsampled, y_g_hat.detach())
-            loss_disc_f = models.discriminator_loss(y_df_hat_r, y_df_hat_g)
+            loss_disc_f = losses.discriminator_loss(y_df_hat_r, y_df_hat_g)
 
             y_ds_hat_r, y_ds_hat_g, _, _ = self.msd(y_upsampled, y_g_hat.detach())
-            loss_disc_s = models.discriminator_loss(y_ds_hat_r, y_ds_hat_g)
+            loss_disc_s = losses.discriminator_loss(y_ds_hat_r, y_ds_hat_g)
 
             loss_disc_all = loss_disc_s + loss_disc_f
             loss_disc_all.backward()
@@ -292,13 +293,13 @@ class Trainer:
             y_df_hat_r, y_df_hat_g, fmap_f_r, fmap_f_g = self.mpd(y_upsampled, y_g_hat)
             y_ds_hat_r, y_ds_hat_g, fmap_s_r, fmap_s_g = self.msd(y_upsampled, y_g_hat)
 
-            loss_fm_f = models.feature_loss(fmap_f_r, fmap_f_g)
-            loss_fm_s = models.feature_loss(fmap_s_r, fmap_s_g)
+            loss_fm_f = losses.feature_loss(fmap_f_r, fmap_f_g)
+            loss_fm_s = losses.feature_loss(fmap_s_r, fmap_s_g)
 
-            loss_gen_f = models.generator_loss(y_df_hat_g)
-            loss_gen_s = models.generator_loss(y_ds_hat_g)
+            loss_gen_f = losses.generator_loss(y_df_hat_g)
+            loss_gen_s = losses.generator_loss(y_ds_hat_g)
 
-            high_freq_loss = models.spectral_cutoff_loss(y_g_hat, sr, self.conf)
+            high_freq_loss = losses.spectral_cutoff_loss(y_g_hat, sr, self.conf)
 
             loss_gen_all = loss_gen_s + loss_gen_f + loss_fm_s + loss_fm_f + 45*loss_mel + 100*high_freq_loss
             loss_gen_all.backward()
@@ -338,10 +339,3 @@ class Trainer:
         self.sw.add_hparams(config.hparam_dict, final_metric_dict)
 
         self.sw.close()
-
-
-if __name__ == "__main__":
-    conf = config.HifiGanConfig()
-
-    trainer = Trainer(conf)
-    trainer.train()
