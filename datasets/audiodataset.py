@@ -12,15 +12,30 @@ import torchaudio
 from torch.utils.data import Dataset, Sampler
 from torch.nn import functional as F
 
-# Custom torch.Dataset ---
+# Custom torch.Dataset
 class AudioDataset(Dataset):
     """
-    Custom PyTorch Dataset to load audio files specified in `audio_files_list`.
-    It loads audio clips, resamples them, and returns processed audio clips along with their mel-spectrograms and sampling rates.
-    
-    Random segments are returned if `adjust_to_seg_size=True`.
+    A PyTorch Dataset for loading and preparing audio data for the conditional vocoder.
+
+    This class implements the "disentangled" data loading strategy. For each
+    audio file, it performs the following key steps:
+    1.  Loads the audio at a high `native_sampling_rate` (e.g., 48kHz).
+    2.  Creates a ground-truth `audio_target` by downsampling to a `target_sr`.
+    3.  Computes a high-resolution mel-spectrogram from the native audio.
+
+    This approach separates the audio's "content" (represented by the high-res mel)
+    from its rendering "style" (the target sample rate), which is provided
+    separately to the model.
 
     See `HifiGanConfig` in `config.py` for more controllability.
+
+    Args:
+        config (HifiGanConfig): Configuration object with audio parameters.
+        audio_files_list (list): A list of file paths to the audio clips.
+        adjust_to_seg_size (bool): If True, returns a random segment of a fixed
+            length from the audio. Otherwise, returns the full clip.
+        random_sampling_rate (bool): If True, assigns a random sample rate to
+            each file. Otherwise, assigns them sequentially.
     """
     def __init__(self, config, audio_files_list, adjust_to_seg_size=True, random_sampling_rate=True):
         super().__init__()
@@ -32,7 +47,6 @@ class AudioDataset(Dataset):
             self.target_srs = [random.choice(self.config.supported_sampling_rates) for _ in range(len(self.audio_files))]
         else:
             self.target_srs = [self.config.supported_sampling_rates[index % len(self.config.supported_sampling_rates)] for index in range(len(self.audio_files))]
-        #self.target_srs = []
 
         self.mel_transform_native = torchaudio.transforms.MelSpectrogram(
             sample_rate=self.config.native_sampling_rate, n_fft=config.n_fft, n_mels=config.n_mels,
@@ -104,8 +118,19 @@ class AudioDataset(Dataset):
             'sr': target_sr,
         }
     
-
+# Custom sampling strategy implementation
 class RateBucketingSampler(Sampler):
+    """A PyTorch Sampler that creates batches where all items share the same sample rate.
+
+    It groups dataset indices into "buckets" based on their assigned
+    sample rate for the current epoch. This ensures all items in a batch have
+    the same dimensions.
+
+    Args:
+        dataset (Dataset): The dataset to sample from. Must have a `target_srs` attribute.
+        batch_size (int): The size of each batch.
+        shuffle (bool): If True, shuffles data for randomness during training.
+    """
     def __init__(self, dataset, batch_size, shuffle=True):
         self.dataset = dataset
         self.batch_size = batch_size

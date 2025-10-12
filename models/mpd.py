@@ -4,6 +4,18 @@ from torch.nn import functional as F
 from torch.nn.utils import weight_norm
 
 class _DiscriminatorP(nn.Module):
+    """
+    A single period-based discriminator from the HiFi-GAN paper.
+
+    This discriminator is designed to capture periodic patterns in audio. It
+    achieves this by reshaping the input 1D waveform into a 2D grid where the
+    width is equal to `period`, and then applying 2D convolutions.
+
+    Args:
+        period (int): The period to analyze in the audio.
+        kernel_size (int): The kernel size for the convolutional layers.
+        stride (int): The stride for the convolutional layers.
+    """
     def __init__(self, period, kernel_size=5, stride=3):
         super(_DiscriminatorP, self).__init__()
         self.period = period
@@ -36,6 +48,14 @@ class _DiscriminatorP(nn.Module):
 
 
 class MultiPeriodDiscriminator(nn.Module):
+    """
+    The Multi-Period Discriminator (MPD) from HiFi-GAN.
+
+    This class is a container for multiple `_DiscriminatorP` instances, each
+    configured with a different prime period. This allows the model to critique
+    the generated audio on a wide range of periodic structures simultaneously,
+    which is crucial for modeling pitch and harmonics correctly.
+    """
     def __init__(self):
         super(MultiPeriodDiscriminator, self).__init__()
         self.discriminators = nn.ModuleList([

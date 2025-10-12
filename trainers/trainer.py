@@ -26,9 +26,13 @@ import config
 
 class Trainer:
     """
-    The main class to treat the HiFi-GAN model implemented in `models.py`. It is used for initialization, training and logging.
+    Orchestrates the training of the conditional HiFi-GAN model.
+
+    This class handles the initialization of models, optimizers and data loaders,
+    and contains the main training loop, validation logic and logging to TensorBoard.
     """
     def __init__(self, config):
+        """Initializes all components required for a training run."""
         self.conf = config
         torch.manual_seed(self.conf.seed)
         
@@ -57,6 +61,7 @@ class Trainer:
         os.makedirs(self.conf.checkpoint_path, exist_ok=True)
         
     def _setup_dataloaders(self):
+        """Finds audio files, creates train/validation splits and sets up DataLoaders."""
         audio_files = glob.glob(os.path.join(self.conf.audio_path, '**', '*.wav'), recursive=True)
         if not audio_files:
             raise FileNotFoundError(f"No audio files found in {self.conf.audio_path}.")
@@ -87,6 +92,7 @@ class Trainer:
         self.visual_loader = DataLoader(visual_dataset, batch_size=1, shuffle=False, collate_fn=ds.collate_fn, num_workers=4, pin_memory=True)
 
     def _mel_spec_for_batch(self, audio_batch, sr_batch):
+        """Creates a mel-spectrogram for each audio sample in the batch by calling `utils.mel_spectrogram`. Returns a tensor of corresponding mel-spectrograms"""
         mel_list = []
         for audio, sr in zip(audio_batch, sr_batch):
             sr = sr.item()
@@ -95,6 +101,7 @@ class Trainer:
         return torch.stack(mel_list)
 
     def _log_training(self, step, start_time, loss_gen, loss_disc, loss_mel, high_freq_loss):
+        """Logs scalar losses to TensorBoard and prints a status message to the console."""
         self.sw.add_scalar("Loss/Train/Generator_total", loss_gen.item(), step)
         self.sw.add_scalar("Loss/Train/Discriminator_total", loss_disc.item(), step)
         self.sw.add_scalar("Loss/Train/Mel_Spectrogram", loss_mel.item(), step)
@@ -109,6 +116,7 @@ class Trainer:
         print(log_str)
 
     def _validate(self, step, start_time):
+        """Runs a validation loop on a subset of the validation data."""
         self.generator.eval()
         self.mpd.eval()
         self.msd.eval()
@@ -195,6 +203,7 @@ class Trainer:
         return avg_gen_loss, avg_disc_loss, avg_mel_loss, avg_high_freq_loss
 
     def _visualize_training(self, step):
+        """Generates audio and spectrograms from a fixed set for qualitative evaluation."""
         self.generator.eval()
 
         with torch.no_grad():
@@ -233,6 +242,7 @@ class Trainer:
         self.generator.train()
 
     def train(self):
+        """The main training loop."""
         self.generator.train()
         self.mpd.train()
         self.msd.train()

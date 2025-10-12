@@ -22,6 +22,7 @@ class ObjEvaluator:
         self.fad_model = FrechetAudioDistance(model_name="vggish", use_pca=False, use_activation=False, verbose=False)
 
     def generate_samples_for_eval(self, raw_fake_dir, real_dir, output_dir):
+        """Creates a directory of generated samples resampled to match their ground-truth counterparts."""
         os.makedirs(output_dir, exist_ok=False)
 
         for filename in os.listdir(real_dir):
@@ -95,13 +96,16 @@ class ObjEvaluator:
         print(f"\nFull evaluation complete. Results saved to {results_path}")
 
 
-parser = argparse.ArgumentParser()
+if __name__ == "__main__":
+    # Parse command line arguments
+    parser = argparse.ArgumentParser()
 
-parser.add_argument('--run_name', type=str, required=True)
-parser.add_argument('--real_dir', type=str, required=True)
-parser.add_argument('--fake_dir', type=str, required=True)
-parser.add_argument('--native_sr', type=int, required=True)
-args = parser.parse_args()
+    parser.add_argument('--run_name', type=str, required=True)
+    parser.add_argument('--real_dir', type=str, required=True)
+    parser.add_argument('--fake_dir', type=str, required=True)
+    parser.add_argument('--native_sr', type=int, required=True)
+    args = parser.parse_args()
 
-evaluator = ObjEvaluator(native_sampling_rate=args.native_sr)
-evaluator.run_full_evaluation(args.fake_dir, args.real_dir, args.run_name)
+    # Run evaluation
+    evaluator = ObjEvaluator(native_sampling_rate=args.native_sr)
+    evaluator.run_full_evaluation(args.fake_dir, args.real_dir, args.run_name)

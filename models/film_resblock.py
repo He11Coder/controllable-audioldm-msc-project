@@ -6,6 +6,12 @@ from torch.nn.utils import weight_norm, remove_weight_norm
 import utils
 
 class _FilmLayer(nn.Module):
+    """
+    A layer that performs Feature-wise Linear Modulation (FiLM).
+
+    It takes a conditioning vector and generates a scale (gamma) and shift (beta)
+    parameter, which are then applied to the main feature map to modulate it.
+    """
     def __init__(self, condition_dim, feature_dim):
         super().__init__()
         self.film_generator = nn.Linear(condition_dim, feature_dim * 2)
@@ -22,6 +28,11 @@ class _FilmLayer(nn.Module):
 
 
 class _FilmResBlock(nn.Module):
+    """A HiFi-GAN residual block modified to incorporate FiLM conditioning.
+
+    This block integrates a `_FilmLayer` to allow a conditioning signal (like a
+    sample rate embedding) to modulate the audio features within the residual path.
+    """
     def __init__(self, channels, sr_emb_dim, kernel_size=3, dilation=(1, 3, 5)):
         super(_FilmResBlock, self).__init__()
         self.convs1 = nn.ModuleList([

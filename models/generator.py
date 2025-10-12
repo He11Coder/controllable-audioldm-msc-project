@@ -7,6 +7,14 @@ from .film_resblock import _FilmResBlock
 import utils
 
 class Generator(nn.Module):
+    """
+    The conditional HiFi-GAN Generator model.
+
+    This class defines the generator architecture, which takes a mel-spectrogram
+    and a conditioning signal (sample rate embedding) to produce a raw audio waveform.
+    It uses a series of transposed convolutions for upsampling and FiLM-conditioned
+    residual blocks (FilmResBlock) for feature refinement.
+    """
     def __init__(self, config):
         super(Generator, self).__init__()
         self.num_kernels = len([3, 7, 11])

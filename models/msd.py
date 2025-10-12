@@ -4,6 +4,16 @@ from torch.nn import functional as F
 from torch.nn.utils import weight_norm, spectral_norm
 
 class _DiscriminatorS(nn.Module):
+    """
+    A single scale-based discriminator from the HiFi-GAN paper.
+
+    This discriminator is a 1D convolutional network that operates directly on the
+    raw audio waveform to evaluate its overall structure and texture.
+
+    Args:
+        use_spectral_norm (bool): If True, applies spectral normalization instead
+        of weight normalization to the convolutional layers.
+    """
     def __init__(self, use_spectral_norm=False):
         super(_DiscriminatorS, self).__init__()
         norm = weight_norm if use_spectral_norm == False else spectral_norm
@@ -31,6 +41,14 @@ class _DiscriminatorS(nn.Module):
 
 
 class MultiScaleDiscriminator(nn.Module):
+    """
+    The Multi-Scale Discriminator (MSD) from HiFi-GAN.
+
+    This class is a container for multiple `_DiscriminatorS` instances. Each
+    sub-discriminator operates on a different-scaled version of the input audio
+    (the original, 2x downsampled, and 4x downsampled), allowing the model to
+    evaluate the audio's structure at various resolutions.
+    """
     def __init__(self):
         super(MultiScaleDiscriminator, self).__init__()
         self.discriminators = nn.ModuleList([

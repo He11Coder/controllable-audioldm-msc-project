@@ -9,19 +9,28 @@ from torch.utils.data import IterableDataset, DataLoader
 from torch.utils.tensorboard import SummaryWriter
 
 import config
-from utils.init_weights import mel_spectrogram, linear_spectrogram
+from utils import mel_spectrogram, linear_spectrogram
 from models import SampleRateEmbedding, Generator
 
 
 class EvalDataset(IterableDataset):
+    """
+    An iterable PyTorch Dataset for evaluation.
+
+    This dataset iterates through a list of audio files and, for each file,
+    yields a separate data point for each target sample rate specified. This design
+    is useful for systematically generating output for the same content under
+    different conditions (i.e., different sample rates).
+    """
     def __init__(self, config, audio_files_list, sampling_rates_to_eval):
+        """Initializes the dataset with file lists and evaluation parameters."""
         super().__init__()
         self.conf = config
         self.audio_files = audio_files_list
         self.sampling_rates = sampling_rates_to_eval
     
     def __iter__(self):
-        #random.shuffle(self.audio_files)
+        """Yields processed data for each file and each target sample rate."""
         for i, file in enumerate(self.audio_files):
             audio, sr = torchaudio.load(file)
 
@@ -46,7 +55,16 @@ class EvalDataset(IterableDataset):
 
 
 class Evaluator:
+    """
+    Handles the evaluation of a trained conditional vocoder, focusing on interpolation.
+    
+    This class loads a trained generator and uses it to synthesize audio for
+    a set of specified (potentially unseen) sample rates. It then generates
+    spectrogram plots to visually verify the model's ability to control the
+    frequency cutoff.
+    """
     def __init__(self, config, sampling_rates_to_eval):
+        """Initializes the evaluator, loads models, and sets up the dataloader."""
         self.conf = config
         self.sampling_rates_to_eval = sampling_rates_to_eval
 
@@ -67,6 +85,7 @@ class Evaluator:
         self._setup_dataloaders()
 
     def _setup_dataloaders(self):
+        """Initializes the evaluation dataset and dataloader."""
         audio_files = glob.glob(os.path.join(self.conf.audio_to_visualize_path, '**', '*.wav'), recursive=True)
         if not audio_files:
             raise FileNotFoundError(f"No audio files found in {self.conf.audio_path}.")
@@ -77,6 +96,7 @@ class Evaluator:
         self.dataloader = DataLoader(dataset, batch_size=None, pin_memory=True)
 
     def _get_interpolated_embedding(self, target_sr):
+        """Calculates an embedding for a continuous SR via linear interpolation."""
         supported_rates = sorted(self.conf.supported_sampling_rates)
 
         # Find the two closest anchor rates (neighbours)
@@ -103,6 +123,7 @@ class Evaluator:
         return interpolated_emb
 
     def evaluate_interpolation(self):
+        """Runs the main evaluation loop to test interpolation performance."""
         for i, data in enumerate(self.dataloader):
             audio = data['audio']
             mel = data['mel'].to(self.device)
@@ -153,7 +174,7 @@ class Evaluator:
 
 
 def plot_spectrogram(waveform, sr, title, ax):
-    """Helper function to plot a linear spectrogram."""
+    """Helper function to plot a linear spectrogram of a waveform."""
     spectrogram_transform = torchaudio.transforms.Spectrogram(
         n_fft=1024,
         hop_length=256,
@@ -169,8 +190,11 @@ def plot_spectrogram(waveform, sr, title, ax):
     ax.set_xlabel("Time (s)")
     return im
 
+
 if __name__ == "__main__":
+    # Create configuration object
     conf = config.HifiGanConfig()
     
+    # Run evaluation
     evaluator = Evaluator(conf, conf.supported_sampling_rates)
     evaluator.evaluate_interpolation()

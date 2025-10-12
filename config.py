@@ -17,7 +17,7 @@ if args.exp_name == None:
 # Model Configuration
 class HifiGanConfig:
     """
-    This class hols all the parameters for training run. See attribute comments for details.
+    This class holds all the parameters for training run. See attribute comments for details.
     """
     # Path of downloaded AudioSet directory
     audio_path = "/scratch/vb00479/audioset_balanced_22k/train"
