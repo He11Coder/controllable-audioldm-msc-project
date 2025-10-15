@@ -27,7 +27,7 @@ This is a repository for the code of master's dissertation "Enhancing Controllab
     * [2. Configuration](#2-configuration)
 
     * [3. Training](#3-training)
-    
+
     * [4. Evaluation](#4-evaluation)
 
 * [Results](#results)
@@ -102,7 +102,7 @@ Follow these steps to set up the project environment.
 
 **1. Clone the repository**:
 ```bash
-git clone https://github.com/He11Coder/controllable-audioldm-msc-project.git
+git clone https://github.com/He11Coder/multi-rate-hifigan.git
 cd controllable-audioldm-msc-project
 ```
 
